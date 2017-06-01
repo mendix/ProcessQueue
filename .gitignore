@@ -1,0 +1,9 @@
+deployment/
+javasource/com/mendix/
+javasource/administration/proxies/
+javasource/processqueue/proxies/
+javasource/system/
+javasource/testmodule/proxies/
+ProcessQueue.launch
+*.lock
+*.bak
