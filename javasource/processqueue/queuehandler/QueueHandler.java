@@ -139,7 +139,7 @@ public class QueueHandler {
 	 * @param overrideFollowUp  :  if this parameter is true the action will be added directly to the regardless of its dependencies
 	 * @throws CoreException
 	 */
-	public synchronized void addActionToQueue( IContext context, IMendixObject actionObject, IMendixObject process, boolean overrideFollowUp ) throws CoreException {
+	public synchronized void addActionToQueue( IContext context, IMendixObject actionObject, IMendixObject process, boolean overrideFollowUp, String calling_microflow_name ) throws CoreException {
 
 		Long queueNr = this.processQueueConfig.get( process.getId().toLong());
 		//In case the queue number isn't cached yet, just retrieve the associated QueueConfiguration to acquire the correct queue number 
@@ -186,7 +186,7 @@ public class QueueHandler {
 			ThreadPoolExecutor tPool = this.queueMap.get(queueNr);
 			if(tPool != null)
 			{
-				ObjectQueueExecutor thread = new ObjectQueueExecutor(context, actionObject, process);
+				ObjectQueueExecutor thread = new ObjectQueueExecutor(context, actionObject, process, calling_microflow_name);
 				tPool.execute(thread);
 			} else
 			{
