@@ -11,6 +11,7 @@ import processqueue.proxies.LogExecutionStatus;
 import processqueue.proxies.LogReason;
 import processqueue.proxies.Process;
 import processqueue.proxies.QueuedAction;
+import processqueue.proxies.microflows.Microflows;
 
 import com.mendix.core.Core;
 import com.mendix.core.CoreException;
@@ -141,9 +142,7 @@ public class ObjectQueueExecutor implements Runnable {
 					setErrormessageAndCommit(this.context, this.action, errorMessage, null, LogExecutionStatus.Skipped, ActionStatus.Cancelled );
 				else {
 					_logNode.info(errorMessage);
-					HashMap<String, Object> paramMap = new HashMap<String, Object>();
-					paramMap.put("ErrorMessage", errorMessage);
-					Core.execute(context, "ProcessQueue.SUB_ProcessQueue_NoActionFoundErrorHandler", paramMap);
+					Microflows.sUB_ProcessQueue_NoActionFoundErrorHandler(context, errorMessage);
 				}
 			}
 			else {
