@@ -32,7 +32,14 @@ public class ObjectQueueExecutor implements Runnable {
 	private IMendixObject action;
 	private long QAGuid;
 	private long actionNr;
+	private String callingMicroflowName;
+	private String referenceText;
 	private State _state = State.initiated;
+	private final int max_retries = processqueue.proxies.constants.Constants.getProcessQueueMaxRetries() != null
+			   ? processqueue.proxies.constants.Constants.getProcessQueueMaxRetries().intValue() 
+			   : 11;
+	private int retryTimeMs = 1000;
+	
 	
 	public enum State {
 		initiated,
@@ -48,11 +55,13 @@ public class ObjectQueueExecutor implements Runnable {
 		threadFinished;
 	}
 
-	public ObjectQueueExecutor( IContext context, IMendixObject action, IMendixObject process ) 
+	public ObjectQueueExecutor( IContext context, IMendixObject action, IMendixObject process, String calling_microflow_name ) 
 	{
 		this.context = context;
 		this.QAGuid = action.getId().toLong();
+		this.callingMicroflowName = calling_microflow_name;
 		this.actionNr = action.getValue(this.context, QueuedAction.MemberNames.ActionNumber.toString());
+		this.referenceText = action.getValue(this.context, QueuedAction.MemberNames.ReferenceText.toString());
 		this.microflowName = (String) process.getValue(this.context, Process.MemberNames.MicroflowFullname.toString());
 		
 		this.action = action;
@@ -75,8 +84,6 @@ public class ObjectQueueExecutor implements Runnable {
 		this.action.setValue(this.context, QueuedAction.MemberNames.QueueNumber.toString(), queueNr);
 	}
 	
-	private final int max_retries = 11;
-	private int retryTimeMs = 1000;
 	
 	@Override
 	public synchronized void run() 
@@ -122,14 +129,22 @@ public class ObjectQueueExecutor implements Runnable {
 				*  	- JPU (Dec 05, 2016)
 				*/			
 				String errorMessage = "QueuedAction: [" + this.QAGuid + "] is not available in the database "
-									+ "(caused by high application load or rollback) so the QueuedAction is being skipped.";
+									+ "(caused by high application load or rollback) so the QueuedAction is being skipped. "
+									+ "Reference text: "+this.referenceText+" ;   "
+									+ "Calling microflow: "+this.callingMicroflowName;
 	
 				this._state = State.failed;
 				
 				this.action = Core.retrieveId(this.context, Core.createMendixIdentifier(this.QAGuid));
 				
-				if (this.action != null) // else gracefully skip
+				if (this.action != null) // else allow the user to handle this event
 					setErrormessageAndCommit(this.context, this.action, errorMessage, null, LogExecutionStatus.Skipped, ActionStatus.Cancelled );
+				else {
+					_logNode.info(errorMessage);
+					HashMap<String, Object> paramMap = new HashMap<String, Object>();
+					paramMap.put("ErrorMessage", errorMessage);
+					Core.execute(context, "ProcessQueue.SUB_ProcessQueue_NoActionFoundErrorHandler", paramMap);
+				}
 			}
 			else {
 				this.action = qaResult.get(0);
@@ -191,7 +206,7 @@ public class ObjectQueueExecutor implements Runnable {
 						IMendixIdentifier processId = followUpAction.getValue(this.context, QueuedAction.MemberNames.QueuedAction_Process.toString());
 						if( processId != null ) { 
 							IMendixObject processObj = Core.retrieveId(this.context, processId);
-							QueueHandler.getQueueHandler().addActionToQueue(this.context, followUpAction, processObj, true);
+							QueueHandler.getQueueHandler().addActionToQueue(this.context, followUpAction, processObj, true, "");
 						}
 						else {
 							setErrormessageAndCommit(this.context, followUpAction, "No process found for the action", null, LogExecutionStatus.FailedExecuted, ActionStatus.Cancelled);

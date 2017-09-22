@@ -49,6 +49,15 @@ public class AppendNewActionToQueue extends CustomJavaAction<java.lang.Boolean>
 		// BEGIN USER CODE
 		IContext context = this.getContext().getSession().createContext().createSudoClone();
 		
+		
+		String calling_microflow_name = "";
+		try {
+			calling_microflow_name = this.getContext().getActionStack().get(0).getActionName();
+		}
+		catch ( Exception e ) {
+			//ignore exception
+		}
+		
 		IMendixObject process = this.__AddActionToProcess;
 		IMendixIdentifier processId = this.__ActionToQueue.getValue(context, QueuedAction.MemberNames.QueuedAction_Process.toString());
 		
@@ -67,7 +76,7 @@ public class AppendNewActionToQueue extends CustomJavaAction<java.lang.Boolean>
 		if( this.__ActionToQueue.isNew() || this.__ActionToQueue.isChanged() ) 
 			Core.commit(getContext(), this.__ActionToQueue);
 	
-		QueueHandler.getQueueHandler().addActionToQueue(context,  this.__ActionToQueue, process, false);
+		QueueHandler.getQueueHandler().addActionToQueue(context,  this.__ActionToQueue, process, false, calling_microflow_name);
 		
 		return true;
 		// END USER CODE
