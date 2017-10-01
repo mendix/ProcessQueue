@@ -52,10 +52,11 @@ public class AppendNewActionToQueue extends CustomJavaAction<java.lang.Boolean>
 		
 		String calling_microflow_name = "";
 		try {
-			calling_microflow_name = this.getContext().getActionStack().get(0).getActionName();
+			if( this.getContext().getActionStack() != null && this.getContext().getActionStack().size() > 0 )
+				calling_microflow_name = this.getContext().getActionStack().get(0).getActionName();
 		}
 		catch ( Exception e ) {
-			//ignore exception
+			Core.getLogger(this.toString()).debug("Unable to get action stack, continueing");
 		}
 		
 		IMendixObject process = this.__AddActionToProcess;
