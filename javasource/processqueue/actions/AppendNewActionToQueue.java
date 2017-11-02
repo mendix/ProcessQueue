@@ -79,11 +79,6 @@ public class AppendNewActionToQueue extends CustomJavaAction<java.lang.Boolean>
 	
 		QueueHandler.getQueueHandler().addActionToQueue(context,  this.__ActionToQueue, process, false, calling_microflow_name);
 		
-		// Based on ticket #56473: Added commit after adding the action to the queue
-		// so status changes always get updated in the client as soon as possible.
-		// E.g. actions being set to "Queued".
-		Core.commit(getContext(), this.ActionToQueue);
-		
 		return true;
 		// END USER CODE
 	}
