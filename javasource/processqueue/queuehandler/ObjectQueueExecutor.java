@@ -11,7 +11,6 @@ import processqueue.proxies.LogExecutionStatus;
 import processqueue.proxies.LogReason;
 import processqueue.proxies.Process;
 import processqueue.proxies.QueuedAction;
-import processqueue.proxies.microflows.Microflows;
 
 import com.mendix.core.Core;
 import com.mendix.core.CoreException;
@@ -67,16 +66,6 @@ public class ObjectQueueExecutor implements Runnable {
 		
 		this.action = action;
 		this.action.setValue(this.context, QueuedAction.MemberNames.Phase.toString(), ActionStatus.Queued.toString());
-		
-		//Make sure we commit the latest info so status changes always get updated in the client as soon as possible.
-		// E.g. actions being set to "Queued".
-		if( this.action.isNew() || this.action.isChanged() ) { 
-			try {
-				Core.commit( this.context, this.action );
-			} catch (CoreException e) {
-				_logNode.error("Error while trying to commit QueuedAction " + this.action.getValue(this.context, QueuedAction.MemberNames.ActionNumber.toString()) + " from queue", e);		
-			}
-		}
 	}
 	
 	public void initializeAction(ActionStatus phase, LogExecutionStatus status ) {
@@ -152,7 +141,9 @@ public class ObjectQueueExecutor implements Runnable {
 					setErrormessageAndCommit(this.context, this.action, errorMessage, null, LogExecutionStatus.Skipped, ActionStatus.Cancelled );
 				else {
 					_logNode.info(errorMessage);
-					Microflows.sUB_ProcessQueue_NoActionFoundErrorHandler(context, errorMessage);
+					HashMap<String, Object> paramMap = new HashMap<String, Object>();
+					paramMap.put("ErrorMessage", errorMessage);
+					Core.execute(context, "ProcessQueue.SUB_ProcessQueue_NoActionFoundErrorHandler", paramMap);
 				}
 			}
 			else {
