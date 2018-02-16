@@ -1,9 +1,14 @@
 
 package processqueue.queuehandler;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.BlockingQueue;
+import java.util.TreeMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -23,7 +28,7 @@ import com.mendix.systemwideinterfaces.core.IMendixObject;
 /**
  * This class manages all the different Queue's.
  * There should only exist one single instance of this class, that class keeps track of all Queues and appends new actions to it. 
- * @author JvdH
+ * @authors JvdH and KJP
  *
  */
 public class QueueHandler {
@@ -32,21 +37,32 @@ public class QueueHandler {
 	 * The map containing all running Queues, the key of the map is the unique Queue number. Which is the ReferenceNumber attribute of the QueueConfig
 	 * These ThreadPoolExecutors keep track of all Queued actions and start executing them.
 	 */
-	private HashMap<Long, ThreadPoolExecutor> queueMap = new HashMap<Long, ThreadPoolExecutor>();
+	private static HashMap<Long, ThreadPoolExecutor> queueMap = new HashMap<Long, ThreadPoolExecutor>();
 	/**  To prevent unnecessary retrieves to acquire the correct Queue number for the process this map keeps track of the different processes and Queues they belong to.
 	 *   The key of the map is the Guid for the process and its value is the Queue reference number  
 	 */
-	private HashMap<Long, Long> processQueueConfig = new HashMap<Long, Long>();
+	private static HashMap<Long, Long> processQueueConfig = new HashMap<Long, Long>();
 	
-	private boolean running = false;
+	private static List<QueueAction> queueActionList = Collections.synchronizedList(new ArrayList<QueueAction>());
+	private static Map<Long, QueueAction> queueActionMap = new TreeMap<Long, QueueAction>();
+		
+//	private boolean running = false;
 	private static ILogNode _node = Core.getLogger("QueueHandler");
 		
 	private static QueueHandler _handler;
+	private static QueueAppender _queueAppender;
+	
 	/**
 	 * @return The instance of the QueueHandler
 	 */
 	public static QueueHandler getQueueHandler()
 	{		
+		if (_queueAppender == null || _queueAppender.isAlive()==false) {
+         	_queueAppender = new QueueAppender();
+         	_queueAppender.setDaemon(true);
+         	_queueAppender.start();
+		}		
+		
 		if ( _handler == null)
 		{
          	_handler = new QueueHandler();
@@ -55,9 +71,9 @@ public class QueueHandler {
 		return _handler;
     }
 	
-	public boolean isRunning(){
-		return this.running;
-	}
+//	public boolean isRunning(){
+//		return this.running;
+//	}
 	
 	/**
 	 * Stop all running and scheduled Queued actions. 
@@ -68,8 +84,8 @@ public class QueueHandler {
 	 */
 	public void stopProcess( boolean gracefully ) {
 		_node.info("Stopping running process");
-		this.running = false;
-		for( Entry<Long, ThreadPoolExecutor> entry : this.queueMap.entrySet() ) {
+//		this.running = false;
+		for( Entry<Long, ThreadPoolExecutor> entry : queueMap.entrySet() ) {
 			if( gracefully )
 				entry.getValue().shutdown();
 			else 
@@ -82,7 +98,7 @@ public class QueueHandler {
 		Long queueNr = queueConfiguration.getValue(context, SharedQueueConfiguration.MemberNames.QueueRefNr.toString());
 		
 		_node.trace("Shutting down queue: " + queueNr);
-		ThreadPoolExecutor queue = this.queueMap.remove(queueNr);
+		ThreadPoolExecutor queue = queueMap.remove(queueNr);
 		if( queue == null )
 			_node.error("Unable to locate queue: " + queueNr + ". Is this queue running?");
 		else {
@@ -123,11 +139,11 @@ public class QueueHandler {
 			 * Most other configuration options will keep the appending processes waiting in case the Queue becomes fuller
 			 */
 			ThreadPoolExecutor tPool = new ThreadPoolExecutor(nrOfThreads, nrOfThreads,
-                    0L, TimeUnit.MILLISECONDS,
+                    Long.MAX_VALUE, TimeUnit.MILLISECONDS,
                     new LinkedBlockingQueue<Runnable>(),
                     customThreadFactory);
 
-			this.queueMap.put(queueNr, tPool);
+			queueMap.put(queueNr, tPool);
 	}
 	
 	/**
@@ -139,9 +155,30 @@ public class QueueHandler {
 	 * @param overrideFollowUp  :  if this parameter is true the action will be added directly to the regardless of its dependencies
 	 * @throws CoreException
 	 */
-	public synchronized void addActionToQueue( IContext context, IMendixObject actionObject, IMendixObject process, boolean overrideFollowUp, String calling_microflow_name ) throws CoreException {
+	public synchronized void appendActionForProcessing( IContext context, IMendixObject actionObject, IMendixObject process, boolean overrideFollowUp ) throws CoreException {
+		QueueAction action = new QueueAction(	context, 
+												actionObject.getValue(context, QueuedAction.MemberNames.ActionNumber.toString()), 
+												actionObject, 
+												process, 
+												overrideFollowUp
+											);
+		synchronized(queueActionList) {
+			queueActionList.add(action);
+		}
+	}
+	
+	/**
+	 * Append the new action to the Queue, based on the configured process the action will be appended to the correct Queue.
+	 * When an action is a follow-up action the Queue will make sure it only starts scheduling the actions without dependencies, once finished all dependent actions will be added to the Queue as well.
+	 * 
+	 * @param actionObject
+	 * @param process
+	 * @param overrideFollowUp  :  if this parameter is true the action will be added directly to the regardless of its dependencies
+	 * @throws CoreException
+	 */
+	public synchronized static void addActionToQueue( IContext context, IMendixObject actionObject, IMendixObject process, boolean overrideFollowUp ) throws CoreException {
 
-		Long queueNr = this.processQueueConfig.get( process.getId().toLong());
+		Long queueNr = processQueueConfig.get( process.getId().toLong());
 		//In case the queue number isn't cached yet, just retrieve the associated QueueConfiguration to acquire the correct queue number 
 		if( queueNr == null ) {                    
 			IMendixIdentifier queueId = process.getValue(context, Process.MemberNames.Process_QueueConfiguration.toString());
@@ -153,9 +190,11 @@ public class QueueHandler {
 				throw new CoreException("Unable to schedule queued action: " + actionObject.getValue(context, QueuedAction.MemberNames.ActionNumber.toString()) + " / " + actionObject.getValue(context, QueuedAction.MemberNames.ReferenceText.toString()) + " the configured microflow: " + microflowName + " does not exist.");
 			
 			queueNr = queue.getValue(context, SharedQueueConfiguration.MemberNames.QueueRefNr.toString());
-			this.processQueueConfig.put(process.getId().toLong(), queueNr);
+			processQueueConfig.put(process.getId().toLong(), queueNr);
             _node.debug("Adding queue to the pool: " + queueNr );
 		}
+		
+		actionObject.setValue(context, QueuedAction.MemberNames.QueueNumber.toString(), queueNr);
 		
 		/* 
 		 * We don't want to process follow up actions immediately, just skip them and wait until the're passed again
@@ -183,10 +222,10 @@ public class QueueHandler {
 
 			_node.debug("Adding action to queue: " + queueNr );
 			
-			ThreadPoolExecutor tPool = this.queueMap.get(queueNr);
+			ThreadPoolExecutor tPool = queueMap.get(queueNr);
 			if(tPool != null)
 			{
-				ObjectQueueExecutor thread = new ObjectQueueExecutor(context, actionObject, process, calling_microflow_name);
+				ObjectQueueExecutor thread = new ObjectQueueExecutor(context, actionObject, process);
 				tPool.execute(thread);
 			} else
 			{
@@ -198,43 +237,65 @@ public class QueueHandler {
 		}
 	}
 	
-	/**
-	 * @return All the relevant information about each Queue. It shows for each Queue, its name, possible queue size and the currently running/waiting actions
-	 */
-	public String monitor( boolean showDebug )
-    {
-        try
-        {
-        	String message = ""; 
-    		for( Entry<Long, ThreadPoolExecutor> entry : this.queueMap.entrySet() ) {
-    			ThreadPoolExecutor te = entry.getValue();
-    			BlockingQueue<Runnable> queue = te.getQueue();
-    			
-    			message += String.format( "Queue: %d, Total active: %d, Total number in waiting queue: %d, Max pool size: %d   |   ",
-    					entry.getKey(),
-    					te.getActiveCount(),
-    					queue.size(),
-    					te.getMaximumPoolSize()
-              		);
-    			
-    			if( showDebug ) {
-    				message += "\r\n<br/> ACTIVE: \r\n<br/>";
-    				for( Runnable r : te.getActiveThreads() ) {
-	    				ObjectQueueExecutor qe = (ObjectQueueExecutor) r;
-	    				message += String.format( " - Action: %d,  MF: %s,  State: %s   \r\n<br/>",
-	    						qe.getActionNr(),
-	    						qe.getMicroflowName(),
-	    						qe.getState().toString());
-    					
-    				}
-    			}
-    		}
-    		return message;
-        }
-        catch (Exception e)
-        {	
-        	return "Unknown error occured in ThreadPoolManager. Please contact your system administrator!";
-        }
-
-    }
+	private static class QueueAppender extends Thread {
+		public void run() {
+			while (true) {
+				Boolean append = true;
+	
+				synchronized(queueActionList) {
+					int size = queueActionList.size();
+					if (size > 0) {
+						int index = 0;
+						while (index < size) {
+							QueueAction action = queueActionList.get(index);
+							queueActionMap.put(action.actionNr, action);
+							index++;
+						}
+						queueActionList.subList(0, queueActionList.size()).clear();
+					}
+				}
+				
+				Iterator<Long> it = queueActionMap.keySet().iterator();
+				
+				while (it.hasNext()) {
+					Long actionNr = it.next();
+					QueueAction action = queueActionMap.get(actionNr);
+					
+					if (action.existsInDB) {
+						try {
+							addActionToQueue(action.context, action.actionObject, action.process, action.overrideFollowUp);
+							it.remove();
+						} catch (CoreException e) {
+							_node.error("Error occurred while trying to add action to the queue in the QueueAppender.", e);
+						}
+						
+					}
+					else {
+						Long qaGUID = action.actionObject.getId().toLong();
+						try {
+							List<IMendixObject> qaResult = Core.retrieveXPathQuery(action.context, "//" + QueuedAction.getType() + "[ID=" + qaGUID + "]");
+							if (qaResult.size() > 0) {
+								action.setExistsInDB(true);
+								if (append) { 
+									addActionToQueue(action.context, action.actionObject, action.process, action.overrideFollowUp);
+									it.remove();
+								}
+							}
+							else {
+								append = false;
+							}
+						} catch (CoreException e) {
+							_node.error("Error occurred while trying to add action to the queue in the QueueAppender.", e);
+						}
+					}
+				}
+				
+				try {
+					Thread.sleep(5000);
+				} catch (InterruptedException e) {
+					_node.error("Queue Appender thread got interrupted while trying to pause.", e);
+				}
+			}
+		}
+	}
 }
