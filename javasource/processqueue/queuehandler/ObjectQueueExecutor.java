@@ -22,7 +22,7 @@ import com.mendix.systemwideinterfaces.core.IMendixObject;
 
 /**
  * This class is responsible for executing the configured Microflow and updating the QueuedAction object afterwards with the correct status.
- * @author JvdH
+ * @authors JvdH and KJP
  *
  */
 public class ObjectQueueExecutor implements Runnable {
@@ -33,14 +33,7 @@ public class ObjectQueueExecutor implements Runnable {
 	private IMendixObject action;
 	private long QAGuid;
 	private long actionNr;
-	private String callingMicroflowName;
-	private String referenceText;
 	private State _state = State.initiated;
-	private final int max_retries = processqueue.proxies.constants.Constants.getProcessQueueMaxRetries() != null
-			   ? processqueue.proxies.constants.Constants.getProcessQueueMaxRetries().intValue() 
-			   : 11;
-	private int retryTimeMs = 1000;
-	
 	
 	public enum State {
 		initiated,
@@ -56,27 +49,19 @@ public class ObjectQueueExecutor implements Runnable {
 		threadFinished;
 	}
 
-	public ObjectQueueExecutor( IContext context, IMendixObject action, IMendixObject process, String calling_microflow_name ) 
+	public ObjectQueueExecutor( IContext context, IMendixObject action, IMendixObject process ) throws CoreException 
 	{
 		this.context = context;
 		this.QAGuid = action.getId().toLong();
-		this.callingMicroflowName = calling_microflow_name;
 		this.actionNr = action.getValue(this.context, QueuedAction.MemberNames.ActionNumber.toString());
-		this.referenceText = action.getValue(this.context, QueuedAction.MemberNames.ReferenceText.toString());
 		this.microflowName = (String) process.getValue(this.context, Process.MemberNames.MicroflowFullname.toString());
 		
 		this.action = action;
 		this.action.setValue(this.context, QueuedAction.MemberNames.Phase.toString(), ActionStatus.Queued.toString());
 		
-		//Make sure we commit the latest info so status changes always get updated in the client as soon as possible.
+		// Based on ticket #56473: so status changes always get updated in the client as soon as possible.
 		// E.g. actions being set to "Queued".
-		if( this.action.isNew() || this.action.isChanged() ) { 
-			try {
-				Core.commit( this.context, this.action );
-			} catch (CoreException e) {
-				_logNode.error("Error while trying to commit QueuedAction " + this.action.getValue(this.context, QueuedAction.MemberNames.ActionNumber.toString()) + " from queue", e);		
-			}
-		}
+		Core.commit(this.context, this.action);
 	}
 	
 	public void initializeAction(ActionStatus phase, LogExecutionStatus status ) {
@@ -103,24 +88,7 @@ public class ObjectQueueExecutor implements Runnable {
 			
 			this._state = State.preparingData;
 			
-			int retries = 0;
 			List<IMendixObject> qaResult = Core.retrieveXPathQuery(this.context, "//" + QueuedAction.getType() + "[ID=" + this.QAGuid + "]");
-			
-			/* 	sometimes it takes a few milliseconds for the record to end up in the database. Rescheduling leads to awkward behavior as 
-			* 	the action numbers no longer follow the FIFO principle of the queue, so this is very much undesired.
-			* 	retries == 0 for always min. 1 retry is on purpose as 0 ms delay is not even enough when doing a simple 3 entities 
-			* 	in a single loop commit.
-			* 	default 1000ms & 11 retries: 1 -> 2 -> 4 -> 8 -> 16 -> 32 -> 64 -> 128 -> 256 -> 512 -> 1024 seconds (sum 2047 seconds is 34 minutes, which is excessive but finite on purpose).
-			* 	An alternative queue method should be added for those that do not wish to rely on the FIFO order but also don't want
-			* 	don't want to skip any actions.
-			* 	- JPU (Dec 05, 2016)
-			*/			
-			while (qaResult.size() == 0 && (retries == 0 || retries < this.max_retries)) {
-				_logNode.debug("QueuedAction: [" + this.QAGuid + "] is not available in the database yet so trying again... retries left: " + (this.max_retries - retries) + ".");
-				qaResult = Core.retrieveXPathQuery(this.context, "//" + QueuedAction.getType() + "[ID=" + this.QAGuid + "]");
-				Thread.sleep(Math.round(this.retryTimeMs*Math.pow(2, retries)));
-				retries++;
-			}
 			
 			if( qaResult.size() == 0 ) {
 				/* 	this means that either the action is not available in the database yet due to a high application load or it means the
@@ -140,9 +108,7 @@ public class ObjectQueueExecutor implements Runnable {
 				*  	- JPU (Dec 05, 2016)
 				*/			
 				String errorMessage = "QueuedAction: [" + this.QAGuid + "] is not available in the database "
-									+ "(caused by high application load or rollback) so the QueuedAction is being skipped. "
-									+ "Reference text: "+this.referenceText+" ;   "
-									+ "Calling microflow: "+this.callingMicroflowName;
+						+ "(caused by high application load or rollback) so the QueuedAction is being skipped.";
 	
 				this._state = State.failed;
 				
@@ -186,15 +152,13 @@ public class ObjectQueueExecutor implements Runnable {
 						_logNode.error("Error while executing: " + this.microflowName + " from the queue", e);
 						setErrormessageAndCommit(this.context, this.action, "Error occured while executing the process, error:" + e.getMessage(), e, LogExecutionStatus.FailedExecuted, ( microflowResult != null && microflowResult ? ActionStatus.Finished : ActionStatus.Cancelled) );
 					} finally {
-						// while should not be necessary but sometimes is, unclear as to why... 
-						// possibly a Runtime issue - found by Bart Luijten & Danny Roest - JUL 16
+						this.context.endTransaction();
 						
-						while (this.context.isInTransaction()) {
-							this.context.endTransaction();
-						}
+						// should not be possible, but there are some concerns this happens on occasion.
+						if (this.context.isInTransaction())
+							_logNode.error("Error while closing transaction for action id: " + this.actionNr);
 					}
 					
-					setQueueNumber(0);
 					if( microflowResult != null ) {
 						if ( microflowResult == true ) {
 							setExecutionLog(LogExecutionStatus.SuccesExecuted, ActionStatus.Finished);
@@ -215,7 +179,7 @@ public class ObjectQueueExecutor implements Runnable {
 						IMendixIdentifier processId = followUpAction.getValue(this.context, QueuedAction.MemberNames.QueuedAction_Process.toString());
 						if( processId != null ) { 
 							IMendixObject processObj = Core.retrieveId(this.context, processId);
-							QueueHandler.getQueueHandler().addActionToQueue(this.context, followUpAction, processObj, true, "");
+							QueueHandler.getQueueHandler().appendActionForProcessing(this.context, followUpAction, processObj, true);
 						}
 						else {
 							setErrormessageAndCommit(this.context, followUpAction, "No process found for the action", null, LogExecutionStatus.FailedExecuted, ActionStatus.Cancelled);

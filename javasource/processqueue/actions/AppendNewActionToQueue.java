@@ -49,16 +49,6 @@ public class AppendNewActionToQueue extends CustomJavaAction<java.lang.Boolean>
 		// BEGIN USER CODE
 		IContext context = this.getContext().getSession().createContext().createSudoClone();
 		
-		
-		String calling_microflow_name = "";
-		try {
-			if( this.getContext().getActionStack() != null && this.getContext().getActionStack().size() > 0 )
-				calling_microflow_name = this.getContext().getActionStack().get(0).getActionName();
-		}
-		catch ( Exception e ) {
-			Core.getLogger(this.toString()).debug("Unable to get action stack, continueing");
-		}
-		
 		IMendixObject process = this.__AddActionToProcess;
 		IMendixIdentifier processId = this.__ActionToQueue.getValue(context, QueuedAction.MemberNames.QueuedAction_Process.toString());
 		
@@ -77,7 +67,7 @@ public class AppendNewActionToQueue extends CustomJavaAction<java.lang.Boolean>
 		if( this.__ActionToQueue.isNew() || this.__ActionToQueue.isChanged() ) 
 			Core.commit(getContext(), this.__ActionToQueue);
 	
-		QueueHandler.getQueueHandler().addActionToQueue(context,  this.__ActionToQueue, process, false, calling_microflow_name);
+		QueueHandler.getQueueHandler().appendActionForProcessing(context,  this.__ActionToQueue, process, false);
 		
 		return true;
 		// END USER CODE

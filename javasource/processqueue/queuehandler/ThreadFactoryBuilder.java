@@ -54,7 +54,7 @@ public class ThreadFactoryBuilder {
  
     public ThreadFactoryBuilder setThreadFactory(
             ThreadFactory backingThreadFactory) {
-        if (null == this.uncaughtExceptionHandler) {
+        if (null == backingThreadFactory) {
             throw new NullPointerException(
                     "BackingThreadFactory cannot be null");
         }
