@@ -67,7 +67,7 @@ public class QueueHandler {
 	 * @param gracefully
 	 */
 	public void stopProcess( boolean gracefully ) {
-		_node.info("Stopping running process");
+		_node.info("Shutting down all Queues " + (gracefully ? "gracefully": ""));
 		this.running = false;
 		for( Entry<Long, ThreadPoolExecutor> entry : this.queueMap.entrySet() ) {
 			if( gracefully )
@@ -75,7 +75,7 @@ public class QueueHandler {
 			else 
 				entry.getValue().shutdownNow();
 		}
-		_node.debug("All pools are stopped");
+		_node.debug("All Queues are stopped " + (gracefully ? "gracefully": ""));
 	}
 
 	public void stopProcess(IContext context, IMendixObject queueConfiguration, Boolean gracefully) {

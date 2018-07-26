@@ -73,7 +73,7 @@ public class ObjectQueueExecutor implements Runnable {
 		if( this.action.isNew() || this.action.isChanged() ) { 
 			try {
 				Core.commit( this.context, this.action );
-			} catch (CoreException e) {
+			} catch (Exception e) {
 				_logNode.error("Error while trying to commit QueuedAction " + this.action.getValue(this.context, QueuedAction.MemberNames.ActionNumber.toString()) + " from queue", e);		
 			}
 		}
@@ -86,7 +86,7 @@ public class ObjectQueueExecutor implements Runnable {
 		
 		try {
 			Core.commit( this.context, this.action );
-		} catch (CoreException e) {
+		} catch (Exception e) {
 			_logNode.error("Error while trying to commit QueuedAction " + this.action.getValue(this.context, QueuedAction.MemberNames.ActionNumber.toString()) + " from queue", e);		
 		}
 	}
@@ -222,7 +222,7 @@ public class ObjectQueueExecutor implements Runnable {
 						}
 						this._state = State.finishedFollowup;
 					}
-				} catch (CoreException e) {
+				} catch (Exception e) {
 					_logNode.info("Error during commit from queue", e);
 					setErrormessageAndCommit(this.context, this.action, "An unknown error occured. Please contact your system administrator.", e, LogExecutionStatus.FailedExecuted, ActionStatus.Cancelled);
 				}

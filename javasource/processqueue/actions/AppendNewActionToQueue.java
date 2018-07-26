@@ -47,7 +47,7 @@ public class AppendNewActionToQueue extends CustomJavaAction<java.lang.Boolean>
 		this.AddActionToProcess = __AddActionToProcess == null ? null : processqueue.proxies.Process.initialize(getContext(), __AddActionToProcess);
 
 		// BEGIN USER CODE
-		IContext context = this.getContext().getSession().createContext().createSudoClone();
+		IContext context = Core.createSystemContext(); 
 		
 		
 		String calling_microflow_name = "";
