@@ -167,9 +167,10 @@ public class ObjectQueueExecutor implements Runnable {
 				try 
 				{
 					// Start the microflow of the action.
-					this.context.startTransaction();
 					try {
-						Object booleanResult = Core.execute(this.context, this.microflowName, this.action);
+						HashMap<String, Object> paramMap = new HashMap<String, Object>();
+						paramMap.put("QueuedAction", this.action);
+						Object booleanResult = Core.execute(this.context, this.microflowName, true, paramMap);
 
 						this._state = State.executionComplete;
 						
@@ -182,7 +183,6 @@ public class ObjectQueueExecutor implements Runnable {
 
 					} catch (Exception e) {
 						this._state = State.executionFailed;
-						this.context.rollbackTransAction();
 						_logNode.error("Error while executing: " + this.microflowName + " from the queue", e);
 						setErrormessageAndCommit(this.context, this.action, "Error occured while executing the process, error:" + e.getMessage(), e, LogExecutionStatus.FailedExecuted, ( microflowResult != null && microflowResult ? ActionStatus.Finished : ActionStatus.Cancelled) );
 					} finally {
