@@ -47,7 +47,7 @@ public class AppendNewActionToQueue extends CustomJavaAction<java.lang.Boolean>
 		this.AddActionToProcess = __AddActionToProcess == null ? null : processqueue.proxies.Process.initialize(getContext(), __AddActionToProcess);
 
 		// BEGIN USER CODE
-		IContext context = this.getContext().getSession().createContext().createSudoClone();
+		IContext context = Core.createSystemContext();
 		
 		IMendixObject process = this.__AddActionToProcess;
 		IMendixIdentifier processId = this.__ActionToQueue.getValue(context, QueuedAction.MemberNames.QueuedAction_Process.toString());
