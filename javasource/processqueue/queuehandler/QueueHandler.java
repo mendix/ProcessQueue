@@ -83,7 +83,7 @@ public class QueueHandler {
 	 * @param gracefully
 	 */
 	public void stopProcess( boolean gracefully ) {
-		_node.info("Stopping running process");
+		_node.info("Shutting down all Queues " + (gracefully ? "gracefully": ""));
 //		this.running = false;
 		for( Entry<Long, ThreadPoolExecutor> entry : queueMap.entrySet() ) {
 			if( gracefully )
@@ -91,7 +91,7 @@ public class QueueHandler {
 			else 
 				entry.getValue().shutdownNow();
 		}
-		_node.debug("All pools are stopped");
+		_node.debug("All Queues are stopped " + (gracefully ? "gracefully": ""));
 	}
 
 	public void stopProcess(IContext context, IMendixObject queueConfiguration, Boolean gracefully) {
@@ -126,24 +126,30 @@ public class QueueHandler {
 		
 		_node.trace("Starting with values queuenr: " + queueNr + " nr of threads "+ nrOfThreads);
 
-	       ThreadFactory customThreadFactory = new ThreadFactoryBuilder()
-           .setNamePrefix(queueName).setDaemon(false)
-           .setPriority(threadAffinity)
-           .build();
-				
-	       _node.info("(Re)setting pool with number: "+ queueNr);
-	       /* 
-			 * Create a FixedThreadPool, this ThreadPool limits the number of threads. 
-			 * Unless specified there should be no limit on the Queue and neither will keep it processes waiting until a spot in the Queue opens op.
-			 * 
-			 * Most other configuration options will keep the appending processes waiting in case the Queue becomes fuller
-			 */
-			ThreadPoolExecutor tPool = new ThreadPoolExecutor(nrOfThreads, nrOfThreads,
-                    Long.MAX_VALUE, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(),
-                    customThreadFactory);
+		ThreadFactory customThreadFactory = new ThreadFactoryBuilder()
+				.setNamePrefix(queueName).setDaemon(false)
+				.setPriority(threadAffinity)
+				.build();
+			
+		_node.info("(Re)setting pool with number: "+ queueNr);
+		/* 
+		 * Create a FixedThreadPool, this ThreadPool limits the number of threads. 
+		 * Unless specified there should be no limit on the Queue and neither will keep it processes waiting until a spot in the Queue opens op.
+		 * 
+		 * Most other configuration options will keep the appending processes waiting in case the Queue becomes fuller
+		 */
+		ThreadPoolExecutor tPool = new ThreadPoolExecutor(nrOfThreads, nrOfThreads,
+				Long.MAX_VALUE, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>(),
+                customThreadFactory);
 
-			queueMap.put(queueNr, tPool);
+	    ThreadPoolExecutor existingTpool = queueMap.get(queueNr);
+
+	    queueMap.put(queueNr, tPool); // replace existing tPool
+	       
+	    if (existingTpool != null) {
+	    	existingTpool.shutdown(); // clean up previous tPool
+	    }
 	}
 	
 	/**

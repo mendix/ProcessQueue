@@ -28,7 +28,7 @@ import com.mendix.systemwideinterfaces.core.IMendixObject;
 public class ObjectQueueExecutor implements Runnable {
 
 	private static final ILogNode _logNode = Core.getLogger("QueueExecutor");
-	private final IContext context;
+	private IContext context;
 	private String microflowName;
 	private IMendixObject action;
 	private long QAGuid;
@@ -71,7 +71,7 @@ public class ObjectQueueExecutor implements Runnable {
 		
 		try {
 			Core.commit( this.context, this.action );
-		} catch (CoreException e) {
+		} catch (Exception e) {
 			_logNode.error("Error while trying to commit QueuedAction " + this.action.getValue(this.context, QueuedAction.MemberNames.ActionNumber.toString()) + " from queue", e);		
 		}
 	}
@@ -186,7 +186,7 @@ public class ObjectQueueExecutor implements Runnable {
 						}
 						this._state = State.finishedFollowup;
 					}
-				} catch (CoreException e) {
+				} catch (Exception e) {
 					_logNode.info("Error during commit from queue", e);
 					setErrormessageAndCommit(this.context, this.action, "An unknown error occured. Please contact your system administrator.", e, LogExecutionStatus.FailedExecuted, ActionStatus.Cancelled);
 				}
@@ -200,6 +200,9 @@ public class ObjectQueueExecutor implements Runnable {
 		finally {
 			this._state = State.threadFinished;
 		}
+		
+		this.context = null; // to improve memory usage in Mendix 7
+		
 	}
 	
 
@@ -217,7 +220,7 @@ public class ObjectQueueExecutor implements Runnable {
 			paramMap.put("StackTrace", stackTraceToString(stacktrace));
 			paramMap.put("Phase", phase.toString());
 			Core.execute(context, "ProcessQueue.SF_WriteExecutionLog", paramMap);
-		} catch (CoreException e) {
+		} catch (Exception e) {
 			_logNode.error("Error while setting log message with stacktrace and error message", e);
 		}
 	}
@@ -235,7 +238,7 @@ public class ObjectQueueExecutor implements Runnable {
 			paramMap.put("Phase", phase.toString());
 			
 			Core.execute(this.context, "ProcessQueue.SF_WriteExecutionLog", paramMap);
-		} catch (CoreException e) {
+		} catch (Exception e) {
 			_logNode.error("Error while setting execution log status: " + status , e);
 		}
 	}
