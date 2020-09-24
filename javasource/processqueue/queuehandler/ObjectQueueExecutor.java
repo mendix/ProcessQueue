@@ -223,15 +223,15 @@ public class ObjectQueueExecutor implements Runnable {
 						this._state = State.finishedFollowup;
 					}
 				} catch (Exception e) {
-					_logNode.info("Error during commit from queue", e);
-					setErrormessageAndCommit(this.context, this.action, "An unknown error occured. Please contact your system administrator.", e, LogExecutionStatus.FailedExecuted, ActionStatus.Cancelled);
+					_logNode.error("Error during commit from queue", e);
+					setErrormessageAndCommit(Core.createSystemContext(), this.action, "An unknown error occured. Please contact your system administrator.", e, LogExecutionStatus.FailedExecuted, ActionStatus.Cancelled);
 				}
 			}
 		} catch (Exception e) {
 			this._state = State.failed;
 			// Microflow is being rollbacked
 			_logNode.error("Error during committing errormessage from queue", e);
-			setErrormessageAndCommit(this.context, this.action, "An unknown error occured. Please contact your system administrator.", e, LogExecutionStatus.FailedExecuted, ActionStatus.Cancelled);
+			setErrormessageAndCommit(Core.createSystemContext(), this.action, "An unknown error occured. Please contact your system administrator.", e, LogExecutionStatus.FailedExecuted, ActionStatus.Cancelled);
 		}
 		finally {
 			this._state = State.threadFinished;
