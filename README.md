@@ -4,9 +4,11 @@ This module enables you to control the amount of these microflows that are execu
 
 ## Description
 This module enables you to control the load on your application by configuring different Queues. The amount of parallel processes and the number of queues can be controlled from the runtime and you’ll be able to see the progress real-time in your application.
-Typical usage scenario
+Typical usage scenario:
 - You want to schedule a job but don’t want to execute the job at a specific time.
 - To control a process which crashes a server if to many users execute the action at the same time.
+
+Features:
 - Create unlimited different queues.
 - Configure multiple different microflows to run in a single queue.
 - Configure multiple different microflows to run each in a different queue.
@@ -29,12 +31,14 @@ In the folder: “Example / Test” you will found an example how to queue an ac
 
 ## Other
 
-The constant: "FinishedQueuedActionsCleanupInDays" can be used to automatically clean up finished queued actions (through the scheduled event SE_CleanupFinishedQueuedActions):
-Negative value = disabled.0 = clear all finished actions1 or more = clear all finished actions that completed [1 or more] days ago.
+The constant: "FinishedQueuedActionsCleanupInDays" can be used to automatically clean up finished queued actions (through the scheduled event SE_CleanupFinishedQueuedActions):  
+Negative value = disabled.  
+0 = clear all finished actions.  
+1 or more = clear all finished actions that completed [1 or more] days ago.
 
-Please note that (when dealing a large amount of actions in a short period of time):
--> Create QueuedAction (no commit) -> add to list -> append to queue -> commit list of queued actions 
-is inferior to:
+Please note that (when dealing a large amount of actions in a short period of time):  
+-> Create QueuedAction (no commit) -> add to list -> append to queue -> commit list of queued actions  
+is inferior to:  
 -> Create QueuedAction (commit) -> append to queue.
 
 However both constructions should work now (tested batch sizes up to 10000 objects in size).
