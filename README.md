@@ -1,6 +1,7 @@
 # ProcessQueue
 This module enables you to control the amount of these microflows that are executed at once by assigning them to queues.  Each of these queues can be configured to handle a subset of these microflows and you can also set a limit to the number of microflows each queue can execute at once. This allows you to control the maximum load put on your application during peak usage by these microflows while still ensuring all microflows will be executed eventually.  The queues use a FIFO approach (first-in, first-out) and will automatically restart themselves (and any microflows still left to execute) after a server restart.
 
+NOTE: This module is deprecated in favor of the [native Task Queue in Mendix 9](https://docs.mendix.com/refguide/task-queue/) and is no longer maintained in this repository.
 
 ## Description
 This module enables you to control the load on your application by configuring different Queues. The amount of parallel processes and the number of queues can be controlled from the runtime and you’ll be able to see the progress real-time in your application.
